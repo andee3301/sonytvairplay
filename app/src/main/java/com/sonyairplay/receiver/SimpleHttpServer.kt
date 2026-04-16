@@ -24,7 +24,7 @@ object SimpleHttpServer {
                 return when (uri) {
                     "/" -> newFixedLengthResponse(Response.Status.OK, "text/plain", "SonyTV AirPlay Receiver")
                     "/play" -> {
-                        val location = headers["content-location"] ?: files["postData"] ?: session.parms["url"]
+                        val location = headers["content-location"] ?: files["postData"] ?: session.parameters["url"]?.firstOrNull()
                         if (!location.isNullOrEmpty()) {
                             Log.i(TAG, "Play request: $location")
                             PlayerManager.playUrl(location)
@@ -42,7 +42,7 @@ object SimpleHttpServer {
                         newFixedLengthResponse(Response.Status.OK, "application/json", "{\"pin\":\"$pin\"}")
                     }
                     "/pair/verify" -> {
-                        val pin = session.parms["pin"] ?: files["postData"]
+                        val pin = session.parameters["pin"]?.firstOrNull() ?: files["postData"]
                         if (pin != null && PairingManager.verifyPin(pin)) {
                             newFixedLengthResponse(Response.Status.OK, "text/plain", "Paired")
                         } else {

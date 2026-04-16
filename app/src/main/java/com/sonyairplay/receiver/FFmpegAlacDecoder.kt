@@ -15,7 +15,7 @@ object FFmpegAlacDecoder {
                 Log.i(TAG, "Decoded $inputFilePath -> $outputPcmPath")
                 onComplete(true, outputPcmPath)
             } else {
-                Log.e(TAG, "FFmpeg failed rc=${'$'}rc")
+                Log.e(TAG, "FFmpeg failed rc=$rc")
                 onComplete(false, outputPcmPath)
             }
         }

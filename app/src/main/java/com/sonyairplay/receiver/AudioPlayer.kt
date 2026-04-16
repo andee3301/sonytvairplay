@@ -22,13 +22,21 @@ object AudioPlayer {
                 val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
                 val audioFormat = AudioFormat.ENCODING_PCM_16BIT
                 val minBuf = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-                audioTrack = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                    val attr = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
-                    val format = AudioFormat.Builder().setEncoding(audioFormat).setSampleRate(sampleRate).setChannelMask(channelConfig).build()
-                    AudioTrack.Builder().setAudioAttributes(attr).setAudioFormat(format).setBufferSizeInBytes(minBuf * 4).setTransferMode(AudioTrack.MODE_STREAM).build()
-                } else {
-                    AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, channelConfig, audioFormat, minBuf * 4, AudioTrack.MODE_STREAM)
-                }
+                val attr = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+                val format = AudioFormat.Builder()
+                    .setEncoding(audioFormat)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(channelConfig)
+                    .build()
+                audioTrack = AudioTrack.Builder()
+                    .setAudioAttributes(attr)
+                    .setAudioFormat(format)
+                    .setBufferSizeInBytes(minBuf * 4)
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .build()
                 audioTrack?.play()
                 val fis = FileInputStream(File(path))
                 val buffer = ByteArray(2048)

@@ -1,31 +1,32 @@
 package com.sonyairplay.receiver
 
 import android.content.Context
-import com.google.android.exoplayer2.SimpleExoPlayer
-import com.google.android.exoplayer2.MediaItem
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
 
 object PlayerManager {
-    private var player: SimpleExoPlayer? = null
-    private var appContext: Context? = null
+    private var player: ExoPlayer? = null
 
     fun init(context: Context) {
-        appContext = context.applicationContext
         if (player == null) {
-            player = SimpleExoPlayer.Builder(appContext!!).build()
+            player = ExoPlayer.Builder(context.applicationContext).build()
         }
     }
 
-    fun getPlayer(): SimpleExoPlayer? = player
+    fun getPlayer(): ExoPlayer? = player
 
     fun playUrl(url: String) {
         val mediaItem = MediaItem.fromUri(url)
-        player?.setMediaItem(mediaItem)
-        player?.prepare()
-        player?.playWhenReady = true
+        player?.apply {
+            setMediaItem(mediaItem)
+            prepare()
+            playWhenReady = true
+        }
     }
 
     fun stop() {
         player?.stop()
+        player?.clearMediaItems()
     }
 
     fun release() {

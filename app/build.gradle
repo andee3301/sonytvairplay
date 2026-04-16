@@ -1,18 +1,30 @@
-apply plugin: 'com.android.application'
-apply plugin: 'org.jetbrains.kotlin.android'
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
 
 android {
-    compileSdkVersion 33
+    namespace 'com.sonyairplay.receiver'
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.sonyairplay.receiver"
-        minSdkVersion 21
-        targetSdkVersion 33
+        minSdk 24
+        targetSdk 34
         versionCode 1
-        versionName "0.1"
+        versionName "0.1.0"
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -23,33 +35,28 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = '17'
     }
 
-    defaultConfig {
-        ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+    packaging {
+        jniLibs {
+            keepDebugSymbols += ['**/*.so']
+            pickFirsts += ['**/*.so']
         }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
+        resources {
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
         }
-    }
-
-    packagingOptions {
-        pickFirst '**/*.so'
     }
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.8.20"
-    implementation 'androidx.core:core-ktx:1.9.0'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.exoplayer:exoplayer:2.19.0'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
-    implementation 'org.jmdns:jmdns:3.5.5'
-    implementation 'com.arthenica:ffmpeg-kit-full:4.5.LTS'
+    implementation 'org.jmdns:jmdns:3.5.9'
+    implementation 'com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.1.1'
 }

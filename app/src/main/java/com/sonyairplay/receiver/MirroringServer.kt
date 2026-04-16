@@ -29,7 +29,7 @@ object MirroringServer {
                 Log.i(TAG, "RTSP server listening on $port")
                 while (running) {
                     val client = serverSocket!!.accept()
-                    Log.i(TAG, "RTSP client connected: ${'$'}{client.inetAddress}")
+                    Log.i(TAG, "RTSP client connected: ${client.inetAddress}")
                     handleClient(client)
                 }
             } catch (e: Exception) {
@@ -59,7 +59,7 @@ object MirroringServer {
                     if (line.trim().isEmpty()) break
                     val idx = line.indexOf(':')
                     if (idx > 0) {
-                        val k = line.substring(0, idx).trim().toLowerCase()
+                        val k = line.substring(0, idx).trim().lowercase()
                         val v = line.substring(idx + 1).trim()
                         headers[k] = v
                         if (k == "cseq") cseq = v
@@ -71,7 +71,7 @@ object MirroringServer {
                     reader.read(bodyChars, 0, contentLength)
                     sdp = String(bodyChars)
                 }
-                Log.i(TAG, "RTSP ${'$'}method headers: ${'$'}headers")
+                Log.i(TAG, "RTSP $method headers: $headers")
                 if (method == "ANNOUNCE" && sdp != null) {
                     // parse sprop-parameter-sets
                     val spropRegex = Regex("sprop-parameter-sets=([A-Za-z0-9+/=,]+)")
@@ -88,7 +88,7 @@ object MirroringServer {
                         }
                     }
                     decoder?.start(sps, pps)
-                    val response = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\nServer: SonyAirPlay/1.0\r\n\r\n"
+                    val response = "RTSP/1.0 200 OK\r\nCSeq: $cseq\r\nServer: SonyAirPlay/1.0\r\n\r\n"
                     writer.write(response.toByteArray())
                     writer.flush()
                     // read next requests
@@ -103,13 +103,13 @@ object MirroringServer {
                             if (hdr.trim().isEmpty()) break
                             val idx2 = hdr.indexOf(':')
                             if (idx2 > 0) {
-                                val k2 = hdr.substring(0, idx2).trim().toLowerCase()
+                                val k2 = hdr.substring(0, idx2).trim().lowercase()
                                 val v2 = hdr.substring(idx2 + 1).trim()
                                 reqHeaders[k2] = v2
                                 if (k2 == "cseq") reqCseq = v2
                             }
                         }
-                        Log.i(TAG, "RTSP ${'$'}reqMethod headers: ${'$'}reqHeaders")
+                        Log.i(TAG, "RTSP $reqMethod headers: $reqHeaders")
                         if (reqMethod == "SETUP") {
                             val transport = reqHeaders["transport"] ?: ""
                             val cpRegex = Regex("client_port=(\\d+)-(\\d+)")
@@ -118,27 +118,27 @@ object MirroringServer {
                                 clientRtpPort = cpMatch.groupValues[1].toInt()
                             }
                             val serverPort = serverRtpPort
-                            val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}reqCseq\r\nTransport: RTP/AVP;unicast;client_port=${'$'}{clientRtpPort}-${'$'}{clientRtpPort+1};server_port=${'$'}{serverPort}-${'$'}{serverPort+1}\r\nSession: 12345678\r\n\r\n"
+                            val resp = "RTSP/1.0 200 OK\r\nCSeq: $reqCseq\r\nTransport: RTP/AVP;unicast;client_port=$clientRtpPort-${clientRtpPort + 1};server_port=$serverPort-${serverPort + 1}\r\nSession: 12345678\r\n\r\n"
                             writer.write(resp.toByteArray())
                             writer.flush()
                         } else if (reqMethod == "RECORD" || reqMethod == "PLAY") {
-                            val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}reqCseq\r\nSession: 12345678\r\n\r\n"
+                            val resp = "RTSP/1.0 200 OK\r\nCSeq: $reqCseq\r\nSession: 12345678\r\n\r\n"
                             writer.write(resp.toByteArray())
                             writer.flush()
                             startRtpReceiver(serverRtpPort)
                         } else if (reqMethod == "TEARDOWN") {
-                            val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}reqCseq\r\nSession: 12345678\r\n\r\n"
+                            val resp = "RTSP/1.0 200 OK\r\nCSeq: $reqCseq\r\nSession: 12345678\r\n\r\n"
                             writer.write(resp.toByteArray())
                             writer.flush()
                             break
                         } else {
-                            val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}reqCseq\r\n\r\n"
+                            val resp = "RTSP/1.0 200 OK\r\nCSeq: $reqCseq\r\n\r\n"
                             writer.write(resp.toByteArray())
                             writer.flush()
                         }
                     }
                 } else {
-                    val response = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\n\r\n"
+                    val response = "RTSP/1.0 200 OK\r\nCSeq: $cseq\r\n\r\n"
                     writer.write(response.toByteArray())
                     writer.flush()
                 }
@@ -154,7 +154,7 @@ object MirroringServer {
         thread {
             try {
                 rtpSocket = DatagramSocket(port)
-                Log.i(TAG, "RTP receiver listening on ${'$'}port")
+                Log.i(TAG, "RTP receiver listening on $port")
                 val buf = ByteArray(4096)
                 val packet = DatagramPacket(buf, buf.size)
                 val baosLocal = ByteArrayOutputStream()

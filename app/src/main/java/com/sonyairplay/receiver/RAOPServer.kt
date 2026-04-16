@@ -45,7 +45,7 @@ object RAOPServer {
                 Log.i(TAG, "RAOP RTSP server listening on $port")
                 while (running) {
                     val client = serverSocket!!.accept()
-                    Log.i(TAG, "RAOP client connected: ${'$'}{client.inetAddress}")
+                    Log.i(TAG, "RAOP client connected: ${client.inetAddress}")
                     handleClient(context, client)
                 }
             } catch (e: Exception) {
@@ -81,17 +81,15 @@ object RAOPServer {
                     }
                 }
                 val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
-                var sdp: String? = null
                 if (contentLength > 0) {
                     val bodyChars = CharArray(contentLength)
                     reader.read(bodyChars, 0, contentLength)
-                    sdp = String(bodyChars)
                 }
-                Log.i(TAG, "RAOP ${'$'}method headers: ${'$'}headers")
+                Log.i(TAG, "RAOP $method headers: $headers")
                 if (method == "ANNOUNCE") {
                     // start a fresh stream file
                     rotateFile(context)
-                    val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\nServer: SonyAirPlay/1.0\r\n\r\n"
+                    val resp = "RTSP/1.0 200 OK\r\nCSeq: $cseq\r\nServer: SonyAirPlay/1.0\r\n\r\n"
                     writer.write(resp.toByteArray())
                     writer.flush()
                 } else if (method == "SETUP") {
@@ -101,12 +99,12 @@ object RAOPServer {
                     cpRegex.find(transport)?.let { clientRtpPort = it.groupValues[1].toInt() }
                     if (interRegex.find(transport) != null) interleaved = true
                     val serverRtp = SERVER_RTP_PORT_DEFAULT
-                    val respTransport = if (interleaved) "RTP/AVP/TCP;unicast;interleaved=0-1" else "RTP/AVP;unicast;client_port=${'$'}{clientRtpPort}-${'$'}{clientRtpPort+1};server_port=${'$'}{serverRtp}-${'$'}{serverRtp+1}"
-                    val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\nTransport: ${'$'}respTransport\r\nSession: 12345678\r\n\r\n"
+                    val respTransport = if (interleaved) "RTP/AVP/TCP;unicast;interleaved=0-1" else "RTP/AVP;unicast;client_port=$clientRtpPort-${clientRtpPort + 1};server_port=$serverRtp-${serverRtp + 1}"
+                    val resp = "RTSP/1.0 200 OK\r\nCSeq: $cseq\r\nTransport: $respTransport\r\nSession: 12345678\r\n\r\n"
                     writer.write(resp.toByteArray())
                     writer.flush()
                 } else if (method == "RECORD") {
-                    val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\nSession: 12345678\r\n\r\n"
+                    val resp = "RTSP/1.0 200 OK\r\nCSeq: $cseq\r\nSession: 12345678\r\n\r\n"
                     writer.write(resp.toByteArray())
                     writer.flush()
                     if (interleaved) {
@@ -115,7 +113,7 @@ object RAOPServer {
                         startRtpReceiver(context, SERVER_RTP_PORT_DEFAULT, clientAddr, clientRtpPort)
                     }
                 } else {
-                    val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\n\r\n"
+                    val resp = "RTSP/1.0 200 OK\r\nCSeq: $cseq\r\n\r\n"
                     writer.write(resp.toByteArray())
                     writer.flush()
                 }
@@ -131,7 +129,7 @@ object RAOPServer {
         thread {
             try {
                 rtpSocket = DatagramSocket(port)
-                Log.i(TAG, "RAOP RTP receiving on ${'$'}port")
+                Log.i(TAG, "RAOP RTP receiving on $port")
                 // RTCP manager (send minimal receiver reports)
                 if (clientAddr != null && clientRtpPort > 0) {
                     val clientRtcpPort = clientRtpPort + 1
@@ -167,7 +165,7 @@ object RAOPServer {
                     if (b == -1) break
                     if (b != 0x24) continue
                     // channel
-                    val channel = `in`.read()
+                    `in`.read()
                     val len1 = `in`.read()
                     val len2 = `in`.read()
                     if (len1 == -1 || len2 == -1) break
@@ -223,11 +221,11 @@ object RAOPServer {
                             try {
                                 currentOut?.flush()
                                 currentOut?.close()
-                                val rotated = File(context.cacheDir, "raop_chunk_${'$'}{System.currentTimeMillis()}.alac")
+                                val rotated = File(context.cacheDir, "raop_chunk_${System.currentTimeMillis()}.alac")
                                 cf.renameTo(rotated)
                                 currentFile = File(context.cacheDir, "raop_stream.alac")
                                 currentOut = FileOutputStream(currentFile, true)
-                                val pcmOut = File(context.cacheDir, "raop_chunk_${'$'}{System.currentTimeMillis()}.pcm")
+                                val pcmOut = File(context.cacheDir, "raop_chunk_${System.currentTimeMillis()}.pcm")
                                 // schedule decode task
                                 decodeExecutor.submit {
                                     try {
@@ -237,7 +235,7 @@ object RAOPServer {
                                                 rotated.delete()
                                                 File(out).delete()
                                             } else {
-                                                Log.w(TAG, "Decoding failed for ${'$'}{rotated.absolutePath}")
+                                                Log.w(TAG, "Decoding failed for ${rotated.absolutePath}")
                                             }
                                         }
                                     } catch (e: Exception) { Log.e(TAG, "decode task error", e) }

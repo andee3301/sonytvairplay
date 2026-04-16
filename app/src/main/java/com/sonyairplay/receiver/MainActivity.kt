@@ -1,12 +1,12 @@
 package com.sonyairplay.receiver
 
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import android.widget.TextView
-import com.google.android.exoplayer2.ui.PlayerView
-import android.view.SurfaceView
-import android.view.SurfaceHolder
 import android.view.Surface
+import android.view.SurfaceHolder
+import android.view.SurfaceView
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.media3.ui.PlayerView
 
 class MainActivity : AppCompatActivity() {
     private var playerView: PlayerView? = null
