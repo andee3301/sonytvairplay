@@ -25,7 +25,7 @@ class MainActivity : AppCompatActivity() {
         // start services
         MdnsAdvertiser.start("SonyTV-AirPlay-Proto")
         SimpleHttpServer.start(7000)
-        RAOPServer.start(5000)
+        RAOPServer.start(this, 5000)
 
         // mirroring surface - start RTSP server when surface is ready
         val surfaceView = findViewById<SurfaceView>(R.id.mirroring_surface)
