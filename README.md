@@ -1,48 +1,50 @@
 # SonyTV AirPlay Receiver (Prototype)
 
-An experimental, personal-use AirPlay/RAOP receiver for Android TV (Sony X85F tested).
-This project aims to provide a practical, non-certified AirPlay receiver supporting:
+Personal, experimental AirPlay/RAOP receiver for Android TV (tested on Sony X85F, Android TV 9).
 
-- mDNS advertisement for AirPlay and RAOP
+This project is intended for private use only. It is NOT Apple-certified and cannot support FairPlay or AirPlay2 DRM features.
+
+Core features
+- mDNS advertisement for `_airplay._tcp` and `_raop._tcp`
 - RTSP mirroring (H.264 → MediaCodec decode)
-- RAOP (AirPlay audio) with ALAC decoding via FFmpeg-kit and low-latency playback
-- Basic pairing (PIN) and simple control endpoints (/play, /stop)
+- RAOP audio ingest with ALAC decoding (FFmpeg-kit fallback; native libavcodec via NDK optional)
+- Basic PIN pairing and simple control endpoints (/play, /stop)
 
-Important: This is a reverse-engineered, personal project. It is NOT Apple-certified and will not support FairPlay DRM or all AirPlay2 features.
-
-Quick start (sideload)
-1. Build debug APK (locally or use the provided GitHub Actions):
-   - Local: open in Android Studio, Build -> Build APK(s)
-   - CI: push to `main`; workflow will build and attach app-debug.apk as an artifact
-2. Sideload via ADB:
+Quick start — sideload (recommended)
+1. Use CI (recommended):
+   - Push a tag `v1.0.0` or run the release workflow manually (Actions → Build and publish release APKs).
+   - The workflow will build APKs and create a GitHub Release; APKs are attached as release assets.
+2. Or build locally in Android Studio and install the debug APK via ADB:
    - `adb connect <TV_IP>:5555`
    - `adb install -r app/build/outputs/apk/debug/app-debug.apk`
-3. Launch app on TV. On a source device (iPhone/macOS) the receiver should appear as an AirPlay target:
-   - AirPlay for screen mirroring: select the target (RTSP mirroring implemented)
-   - AirPlay audio: select the target for audio (RAOP)
+3. Open the app on the TV. From an iPhone/macOS: select the device in AirPlay (mirroring or audio).
 
-What's optimized in this repo
-- RAOP pipeline:
-  - Small buffer rotation (150ms / ~2KB chunks) for aggressive latency reduction
-  - Single-thread FFmpeg decode queue to avoid CPU thrash
-  - Streaming playback via AudioTrack with reduced buffers
-  - Minimal RTCP Receiver Reports to improve sender behaviour and sync
-- Mirroring:
-  - RTSP ANNOUNCE/SETUP/RECORD flow and RTP FU-A reassembly
-  - MediaCodec decode to Surface for low-overhead rendering
+Native ALAC (NDK) — optional, low-latency path
+- The project includes a JNI scaffold (app/src/main/cpp/native_alac.c) and CMake support that will link to libavcodec/libavformat/etc if the native libraries are present.
+- CI can optionally download prebuilt ffmpeg-kit native libraries and place them under `app/src/main/cpp/libs/<abi>/lib*.so`. To enable this, set the repository secret `FFMPEG_KIT_DOWNLOAD_URL` to a direct URL to a ffmpeg-kit Android zip (prebuilt libs). The release CI step will extract and copy libavcodec/libavformat/libavutil/libswresample/libswscale into the NDK libs path before building.
+- If native libs are not provided, the app falls back to the Java ffmpeg-kit decoder path (slightly higher latency).
 
-CI / Build pipeline
-- `.github/workflows/build_pipeline.yml` builds debug and release unsigned APKs and uploads them as artifacts for easy sideloading.
+How to enable native decode via CI
+1. Add repo secret: `FFMPEG_KIT_DOWNLOAD_URL` → a direct downloadable zip of ffmpeg-kit with lib/<abi>/lib*.so files.
+2. Push a release tag or dispatch the workflow; CI will copy native libs into `app/src/main/cpp/libs/*` and the CMakeLists will link them into the native_alac library.
 
-Limitations & Next steps
-- Encrypted RAOP (FairPlay) and AirPlay2 multiroom are not supported.
-- This prototype uses FFmpeg-kit for ALAC decoding; for the lowest possible latency consider a native ALAC decoder integrated via NDK.
-- Further sync improvements (accurate RTCP SR parsing, RTP timestamp to NTP mapping) can reduce AV skew.
+Notes on latency and reliability
+- Native libavcodec via NDK offers the best latency but increases CI complexity and APK size.
+- The current RAOP pipeline includes aggressive buffering (rotate interval ≈150ms) and tuned AudioTrack buffer sizes. Tunables live in `RAOPServerOptimized.kt` and `AudioPlayer.kt`.
 
-Security & legal
-- Do not distribute this app commercially. Reverse-engineering and using Apple protocols beyond personal experimentation may have legal implications.
+CI / Release pipeline
+- `.github/workflows/release.yml` (this repo) builds APKs and creates a GitHub Release when a tag is pushed (or when run manually). APK artifacts are attached to the Release.
+- Use the `FFMPEG_KIT_DOWNLOAD_URL` secret to enable native lib linking in CI.
 
-Contributing
-- This is a personal project scaffold. PRs and improvements welcome — start by running the CI to validate build artifacts.
+Next steps planned
+- Implement in-memory native ALAC decode using libavcodec (JNI) to replace file-rotate + ffmpeg fallback.
+- Improve RTCP SR parsing and RTP→NTP mapping for tighter A/V sync.
+- Optional: sign releases by adding a keystore and signing in CI (provide keystore via GitHub Secrets).
+
+Caveats
+- This is experimental reverse-engineered functionality. Use only for personal devices.
+- FFmpeg-kit increases APK size significantly; plan for large artifacts when sideloading.
+
+If you want, trigger a release now (provide a tag) or allow CI to fetch ffmpeg-kit native libs by setting `FFMPEG_KIT_DOWNLOAD_URL` secret.
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
