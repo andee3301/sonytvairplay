@@ -1,14 +1,18 @@
-name: Build APKs and upload artifacts
+name: Build and publish release APKs
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: false
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
       - name: Setup JDK 17
@@ -37,14 +41,32 @@ jobs:
           chmod +x gradlew || true
           ./gradlew clean assembleDebug assembleRelease --no-daemon
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          release_name: Release ${{ github.event.inputs.tag || github.ref_name }}
+          body: "Automated release: debug and unsigned release APKs"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload debug APK
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: app/build/outputs/apk/debug/app-debug.apk
+          asset_name: app-debug.apk
+          asset_content_type: application/vnd.android.package-archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload unsigned release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-release-asset@v1
         with:
-          name: app-release-unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: app/build/outputs/apk/release/app-release-unsigned.apk
+          asset_name: app-release-unsigned.apk
+          asset_content_type: application/vnd.android.package-archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
