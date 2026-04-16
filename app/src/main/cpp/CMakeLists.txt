@@ -1,15 +1,25 @@
 cmake_minimum_required(VERSION 3.10)
 project(native_alac)
 
-add_library( # Sets the name of the library.
-             native_alac
-             SHARED
-             native_alac.c )
+set(CMAKE_C_STANDARD 99)
 
-find_library( # Sets the name of the path variable.
-              log-lib
-              log )
+add_library(native_alac SHARED native_alac.c)
 
-target_link_libraries( # Specifies the target library.
-                       native_alac
-                       ${log-lib} )
+# Directory where optional prebuilt ffmpeg native libs are placed by CI or manually
+set(PREBUILT_LIBS_DIR "${CMAKE_SOURCE_DIR}/../libs/${ANDROID_ABI}")
+
+set(FFMPEG_LIBS)
+
+foreach(lib avcodec avformat avutil swresample swscale)
+  set(libfile "${PREBUILT_LIBS_DIR}/lib${lib}.so")
+  if(EXISTS ${libfile})
+    add_library(${lib} SHARED IMPORTED)
+    set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${libfile})
+    list(APPEND FFMPEG_LIBS ${lib})
+  endif()
+endforeach()
+
+find_library(log-lib log)
+
+target_link_libraries(native_alac ${FFMPEG_LIBS} ${log-lib})
+

@@ -34,6 +34,26 @@ jobs:
           yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-33" "build-tools;33.0.2" "cmake;3.10.2.4988404" "ndk;21.4.7075529"
 
+      - name: Optional: download ffmpeg-kit native libs
+        run: |
+          if [ -z "${{ secrets.FFMPEG_KIT_DOWNLOAD_URL }}" ]; then
+            echo "FFMPEG_KIT_DOWNLOAD_URL not set; skipping ffmpeg native libs download"
+          else
+            mkdir -p app/src/main/cpp/libs
+            wget -q -O /tmp/ffmpegkit.zip "${{ secrets.FFMPEG_KIT_DOWNLOAD_URL }}"
+            unzip -q /tmp/ffmpegkit.zip -d /tmp/ffmpegkit
+            # copy common ffmpeg libs into expected directories
+            for libname in libavcodec.so libavformat.so libavutil.so libswresample.so libswscale.so; do
+              find /tmp/ffmpegkit -type f -name "${libname}" -print0 | while IFS= read -r -d '' libfile; do
+                abi=$(basename "$(dirname "$libfile")")
+                dest="app/src/main/cpp/libs/${abi}"
+                mkdir -p "$dest"
+                cp "$libfile" "$dest"/
+              done
+            done
+            echo "Copied ffmpeg native libs to app/src/main/cpp/libs/*"
+          fi
+
       - name: Build APKs
         env:
           ANDROID_SDK_ROOT: ${{ env.HOME }}/android-sdk
