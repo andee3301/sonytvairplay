@@ -1,5 +1,6 @@
 package com.sonyairplay.receiver
 
+import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -11,21 +12,33 @@ import kotlin.concurrent.thread
 object AudioPlayer {
     private const val TAG = "AudioPlayer"
     private var audioTrack: AudioTrack? = null
+    private var playingThread: Thread? = null
 
     fun playPcmFile(path: String) {
-        thread {
+        stop()
+        playingThread = thread {
             try {
                 val sampleRate = 44100
                 val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
                 val audioFormat = AudioFormat.ENCODING_PCM_16BIT
                 val minBuf = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-                audioTrack = AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, channelConfig, audioFormat, minBuf, AudioTrack.MODE_STREAM)
+                audioTrack = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    val attr = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
+                    val format = AudioFormat.Builder().setEncoding(audioFormat).setSampleRate(sampleRate).setChannelMask(channelConfig).build()
+                    AudioTrack.Builder().setAudioAttributes(attr).setAudioFormat(format).setBufferSizeInBytes(minBuf * 4).setTransferMode(AudioTrack.MODE_STREAM).build()
+                } else {
+                    AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, channelConfig, audioFormat, minBuf * 4, AudioTrack.MODE_STREAM)
+                }
                 audioTrack?.play()
                 val fis = FileInputStream(File(path))
-                val buffer = ByteArray(4096)
+                val buffer = ByteArray(2048)
                 var read = fis.read(buffer)
                 while (read > 0) {
-                    audioTrack?.write(buffer, 0, read)
+                    var offset = 0
+                    while (offset < read) {
+                        val wrote = audioTrack?.write(buffer, offset, read - offset) ?: 0
+                        if (wrote > 0) offset += wrote else Thread.sleep(1)
+                    }
                     read = fis.read(buffer)
                 }
                 fis.close()
@@ -36,5 +49,17 @@ object AudioPlayer {
                 Log.e(TAG, "play error", e)
             }
         }
+    }
+
+    fun stop() {
+        try {
+            playingThread?.interrupt()
+            playingThread = null
+        } catch (e: Exception) {}
+        try {
+            audioTrack?.stop()
+            audioTrack?.release()
+        } catch (e: Exception) {}
+        audioTrack = null
     }
 }

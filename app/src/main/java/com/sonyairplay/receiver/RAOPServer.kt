@@ -2,16 +2,24 @@ package com.sonyairplay.receiver
 
 import android.content.Context
 import android.util.Log
-import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
+import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
+/**
+ * RAOPServer (optimized)
+ * - Reduced rotation interval and size threshold for low latency
+ * - Single-threaded decode executor to avoid FFmpeg thrashing
+ * - Integrates a simple RTCP manager that sends receiver reports periodically
+ * - Streams decoded PCM chunks to AudioPlayer for playback
+ */
 object RAOPServer {
     private const val TAG = "RAOPServer"
     private var serverSocket: ServerSocket? = null
@@ -21,6 +29,13 @@ object RAOPServer {
     private var currentFile: File? = null
     private val lock = Object()
     private var decodeThreadRunning = false
+    private val decodeExecutor = Executors.newSingleThreadExecutor()
+    private var rtcpManager: RtcpManager? = null
+
+    // tuning parameters (aggressive, for low-latency personal use)
+    private const val ROTATE_INTERVAL_MS = 150L
+    private const val ROTATE_SIZE_THRESHOLD = 2048 // bytes
+    private const val SERVER_RTP_PORT_DEFAULT = 6000
 
     fun start(context: Context, port: Int = 5000) {
         running = true
@@ -45,6 +60,7 @@ object RAOPServer {
         thread {
             var clientRtpPort = -1
             var interleaved = false
+            val clientAddr = socket.inetAddress
             try {
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                 val writer = socket.getOutputStream()
@@ -73,7 +89,7 @@ object RAOPServer {
                 }
                 Log.i(TAG, "RAOP ${'$'}method headers: ${'$'}headers")
                 if (method == "ANNOUNCE") {
-                    // accept announce, create new file for audio
+                    // start a fresh stream file
                     rotateFile(context)
                     val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\nServer: SonyAirPlay/1.0\r\n\r\n"
                     writer.write(resp.toByteArray())
@@ -84,7 +100,7 @@ object RAOPServer {
                     val interRegex = Regex("interleaved=(\\d+)-(\\d+)")
                     cpRegex.find(transport)?.let { clientRtpPort = it.groupValues[1].toInt() }
                     if (interRegex.find(transport) != null) interleaved = true
-                    val serverRtp = 6000
+                    val serverRtp = SERVER_RTP_PORT_DEFAULT
                     val respTransport = if (interleaved) "RTP/AVP/TCP;unicast;interleaved=0-1" else "RTP/AVP;unicast;client_port=${'$'}{clientRtpPort}-${'$'}{clientRtpPort+1};server_port=${'$'}{serverRtp}-${'$'}{serverRtp+1}"
                     val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\nTransport: ${'$'}respTransport\r\nSession: 12345678\r\n\r\n"
                     writer.write(resp.toByteArray())
@@ -94,10 +110,9 @@ object RAOPServer {
                     writer.write(resp.toByteArray())
                     writer.flush()
                     if (interleaved) {
-                        // read interleaved RTP over TCP
-                        readInterleaved(socket, context)
+                        readInterleaved(socket, context, clientAddr, clientRtpPort)
                     } else {
-                        startRtpReceiver(context, 6000)
+                        startRtpReceiver(context, SERVER_RTP_PORT_DEFAULT, clientAddr, clientRtpPort)
                     }
                 } else {
                     val resp = "RTSP/1.0 200 OK\r\nCSeq: ${'$'}cseq\r\n\r\n"
@@ -112,11 +127,17 @@ object RAOPServer {
         }
     }
 
-    private fun startRtpReceiver(context: Context, port: Int) {
+    private fun startRtpReceiver(context: Context, port: Int, clientAddr: java.net.InetAddress?, clientRtpPort: Int) {
         thread {
             try {
                 rtpSocket = DatagramSocket(port)
                 Log.i(TAG, "RAOP RTP receiving on ${'$'}port")
+                // RTCP manager (send minimal receiver reports)
+                if (clientAddr != null && clientRtpPort > 0) {
+                    val clientRtcpPort = clientRtpPort + 1
+                    rtcpManager = RtcpManager(clientAddr, clientRtcpPort)
+                    rtcpManager?.start()
+                }
                 val buf = ByteArray(8192)
                 val packet = DatagramPacket(buf, buf.size)
                 while (running) {
@@ -133,17 +154,15 @@ object RAOPServer {
                 try { rtpSocket?.close() } catch (e: Exception) {}
             }
         }
-        // start periodic rotator
         startRotator(context)
     }
 
-    private fun readInterleaved(socket: Socket, context: Context) {
+    private fun readInterleaved(socket: Socket, context: Context, clientAddr: java.net.InetAddress?, clientRtpPort: Int) {
         thread {
             try {
                 val `in` = socket.getInputStream()
-                val header = ByteArray(4)
                 while (running) {
-                    // read $  (0x24)
+                    // read $ (0x24)
                     val b = `in`.read()
                     if (b == -1) break
                     if (b != 0x24) continue
@@ -160,7 +179,7 @@ object RAOPServer {
                         if (r == -1) break
                         read += r
                     }
-                    if (payload.isNotEmpty() && payload.size > 12) {
+                    if (payload.size > 12) {
                         val rtpPayload = payload.copyOfRange(12, payload.size)
                         appendPayload(context, rtpPayload)
                     }
@@ -168,6 +187,11 @@ object RAOPServer {
             } catch (e: Exception) {
                 Log.e(TAG, "Interleaved read error", e)
             }
+        }
+        if (clientAddr != null && clientRtpPort > 0) {
+            val clientRtcpPort = clientRtpPort + 1
+            rtcpManager = RtcpManager(clientAddr, clientRtcpPort)
+            rtcpManager?.start()
         }
         startRotator(context)
     }
@@ -189,13 +213,13 @@ object RAOPServer {
     private fun startRotator(context: Context) {
         if (decodeThreadRunning) return
         decodeThreadRunning = true
-        thread {
+        decodeExecutor.submit {
             try {
                 while (running) {
-                    Thread.sleep(600)
+                    Thread.sleep(ROTATE_INTERVAL_MS)
                     synchronized(lock) {
                         val cf = currentFile
-                        if (cf != null && cf.exists() && cf.length() > 4096) {
+                        if (cf != null && cf.exists() && cf.length() > ROTATE_SIZE_THRESHOLD) {
                             try {
                                 currentOut?.flush()
                                 currentOut?.close()
@@ -204,14 +228,19 @@ object RAOPServer {
                                 currentFile = File(context.cacheDir, "raop_stream.alac")
                                 currentOut = FileOutputStream(currentFile, true)
                                 val pcmOut = File(context.cacheDir, "raop_chunk_${'$'}{System.currentTimeMillis()}.pcm")
-                                FFmpegAlacDecoder.decodeAlacToPcm(rotated.absolutePath, pcmOut.absolutePath) { ok, out ->
-                                    if (ok) {
-                                        AudioPlayer.playPcmFile(out)
-                                        rotated.delete()
-                                        File(out).delete()
-                                    } else {
-                                        Log.w(TAG, "Decoding failed for ${'$'}{rotated.absolutePath}")
-                                    }
+                                // schedule decode task
+                                decodeExecutor.submit {
+                                    try {
+                                        FFmpegAlacDecoder.decodeAlacToPcm(rotated.absolutePath, pcmOut.absolutePath) { ok, out ->
+                                            if (ok) {
+                                                AudioPlayer.playPcmFile(out)
+                                                rotated.delete()
+                                                File(out).delete()
+                                            } else {
+                                                Log.w(TAG, "Decoding failed for ${'$'}{rotated.absolutePath}")
+                                            }
+                                        }
+                                    } catch (e: Exception) { Log.e(TAG, "decode task error", e) }
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "rotate error", e)
@@ -227,6 +256,14 @@ object RAOPServer {
         }
     }
 
+    private fun rotateFile(context: Context) {
+        synchronized(lock) {
+            try { currentOut?.close() } catch (e: Exception) {}
+            currentFile = File(context.cacheDir, "raop_stream.alac")
+            currentOut = FileOutputStream(currentFile, true)
+        }
+    }
+
     fun stop() {
         running = false
         try { serverSocket?.close() } catch (e: Exception) {}
@@ -236,5 +273,7 @@ object RAOPServer {
             currentOut = null
             currentFile = null
         }
+        try { rtcpManager?.stop() } catch (e: Exception) {}
+        decodeExecutor.shutdownNow()
     }
 }
