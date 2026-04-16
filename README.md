@@ -15,7 +15,16 @@ Build & run (local dev):
 - Build and generate APK (assembleDebug)
 - Sideload the APK to your Android TV
 
-Limitations:
-- Not Apple‑certified. FairPlay and AirPlay‑2 features not supported.
+Build & sideload (quick):
+
+- Open the project in Android Studio (root folder). Let Android Studio download the Gradle wrapper and SDK.
+- Build -> Build Bundle(s) / APK(s) -> Build APK(s).
+- Sideload to your TV via adb:
+  - adb connect <TV_IP>:5555
+  - adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+Notes:
+- RAOP (AirPlay audio) is implemented as a UDP listener stub only; ALAC decoding / RAOP encryption is not implemented in this prototype. ExoPlayer handles most media URL playback and HLS.
+- This is for personal use only; not Apple‑certified. Some AirPlay features (FairPlay DRM, AirPlay 2 multiroom) will not work.
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
